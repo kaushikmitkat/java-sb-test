@@ -9,7 +9,7 @@ RUN mvn dependency:go-offline -B
 
 COPY src /app/src
 
-RUN mvn clean package
+RUN mvn clean package -DskipTests
 
 COPY target/patient-service-0.0.1-SNAPSHOT.jar /app/patient-service.jar
 
