@@ -1,4 +1,4 @@
-name: Build Changed Maven Projects (With Caching)
+name: Build Changed Maven Projects (Reliable Detection)
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Needed to compare commits properly
+          fetch-depth: 0  # Required for git diff to work across commits
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -39,30 +39,36 @@ jobs:
         run: |
           git fetch origin main --depth=1
 
-          # Get changed files since main
-          CHANGED_FILES=$(git diff --name-only origin/main)
+          # Get changed files
+          git diff --name-only origin/main > changed_files.txt
 
-          # Detect modified Maven project directories (pom.xml or src/ changes)
-          CHANGED_DIRS=$(echo "$CHANGED_FILES" | grep -E 'pom\.xml|src/' | xargs -n1 dirname | sort -u)
+          # Find all Maven projects (folders containing pom.xml)
+          find . -name pom.xml | while read -r pom; do
+            project_dir=$(dirname "$pom")
 
-          if [ -z "$CHANGED_DIRS" ]; then
-            echo "No relevant Maven project changes."
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "$CHANGED_DIRS" > changed_dirs.txt
-            echo "Changed project directories:"
-            cat changed_dirs.txt
+            # Check if any changed file is inside this project
+            if grep -q "^${project_dir#/}/" changed_files.txt; then
+              echo "$project_dir" >> changed_projects.txt
+            fi
+          done
+
+          if [ -f changed_projects.txt ]; then
+            sort -u changed_projects.txt > final_projects.txt
+            cat final_projects.txt
             echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No relevant Maven project changes detected."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build Changed Projects
         if: steps.changes.outputs.changed == 'true'
         run: |
-          while IFS= read -r dir; do
-            if [ -f "$dir/pom.xml" ]; then
-              echo "🔨 Building project in $dir"
-              mvn -B -f "$dir/pom.xml" clean install
+          while IFS= read -r project_dir; do
+            if [ -f "$project_dir/pom.xml" ]; then
+              echo "🔨 Building: $project_dir"
+              mvn -B -f "$project_dir/pom.xml" clean install
             else
-              echo "⚠️ No pom.xml in $dir, skipping"
+              echo "⚠️ Skipping $project_dir (no pom.xml)"
             fi
-          done < changed_dirs.txt
+          done < final_projects.txt
