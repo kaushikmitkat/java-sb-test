@@ -32,6 +32,13 @@ public class PatientController {
          return ResponseEntity.ok(patientService.getPatients());
      }
 
+     @GetMapping("/test")
+     @Operation(summary = "Test endpoint", description = "A test endpoint to check the service")
+    public ResponseEntity<String> test() {
+        return ResponseEntity.ok("Test endpoint is working");
+    }
+
+
     @PostMapping("")
     @Operation(summary = "Create a new patient", description = "Add a new patient to the system")
     public ResponseEntity<PatientResponseDTO> createPatient(@Validated({Default.class, CreatePatientValidationGroup.class}) @RequestBody PatientRequestDTO patientRequestDTO) {
