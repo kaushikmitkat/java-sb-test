@@ -1,4 +1,4 @@
-name: Build Changed Maven Projects (Robust)
+name: Build Changed Maven Projects
 
 on:
   push:
@@ -11,22 +11,22 @@ on:
 
 jobs:
   build:
-    name: Build Only Changed Maven Projects
     runs-on: ubuntu-latest
+    name: Build Only Changed Maven Projects
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Required for git diff
+          fetch-depth: 0
 
-      - name: Set up JDK 17
+      - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Cache Maven packages
+      - name: Cache Maven local repo
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
@@ -34,44 +34,41 @@ jobs:
           restore-keys: |
             maven-${{ runner.os }}-
 
-      - name: Determine changed Maven projects
+      - name: Detect changed Maven projects
         id: changes
         run: |
           git fetch origin main
 
-          # Get all changed files
+          echo "🔍 Checking for changed Maven projects..."
+          mkdir -p changed
+
+          # Get a list of changed files since base branch
           git diff --name-only origin/main > changed_files.txt
 
-          # Clean path list to avoid issues with ./ and spaces
-          CHANGED_PROJECTS=()
+          # Find all Maven projects by looking for pom.xml
+          find . -name "pom.xml" | while read -r pom_path; do
+            project_dir=$(dirname "$pom_path")
+            project_dir=${project_dir#./}  # Strip leading ./
 
-          # Loop over all pom.xml files
-          while IFS= read -r pom; do
-            project_dir=$(realpath --relative-to=. "$(dirname "$pom")")
-          
-            while IFS= read -r changed_file; do
-              # If the changed file is inside this project directory
-              if [[ "$changed_file" == "$project_dir/"* ]]; then
-                CHANGED_PROJECTS+=("$project_dir")
-                break
-              fi
-            done < changed_files.txt
-          done < <(find . -name pom.xml)
+            # Check if any changed file is inside this project directory
+            if grep -q "^${project_dir}/" changed_files.txt; then
+              echo "✅ Changed: $project_dir"
+              echo "$project_dir" >> changed/changed_projects.txt
+            fi
+          done
 
-          # Remove duplicates and output
-          if [ ${#CHANGED_PROJECTS[@]} -eq 0 ]; then
-            echo "No relevant project changes found."
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            printf "%s\n" "${CHANGED_PROJECTS[@]}" | sort -u > final_projects.txt
-            cat final_projects.txt
+          if [ -f changed/changed_projects.txt ]; then
+            sort -u changed/changed_projects.txt > changed/final.txt
             echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No changed Maven projects."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build Changed Projects
         if: steps.changes.outputs.changed == 'true'
         run: |
           while IFS= read -r dir; do
-            echo "🔨 Building project: $dir"
+            echo "🔨 Building $dir"
             mvn -B -f "$dir/pom.xml" clean install
-          done < final_projects.txt
+          done < changed/final.txt
