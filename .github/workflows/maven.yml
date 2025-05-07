@@ -16,6 +16,7 @@ jobs:
           java-version: '21'
 
       - name: Build Project
+        working-directory: ./patient-service
         run: mvn clean install -DskipTests
 
       - name: Configure AWS credentials
