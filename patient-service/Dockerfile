@@ -11,12 +11,6 @@ COPY src /app/src
 
 RUN mvn clean package
 
-FROM openjdk:21-jdk AS runner
+COPY target/patient-service-0.0.1-SNAPSHOT.jar /app/patient-service.jar
 
-WORKDIR /app
-
-COPY --from=builder /app/target/patient-service-0.0.1-SNAPSHOT.jar /app/app.jar
-
-EXPOSE 4000
-
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+CMD ["java", "-jar", "/app/patient-service.jar"]
