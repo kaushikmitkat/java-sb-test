@@ -7,8 +7,8 @@
   "executionRoleArn": "arn:aws:iam::410699729259:role/ecsTaskExecutionRole",
   "containerDefinitions": [
     {
-      "name": "springboot-container",
-      "image": "410699729259.dkr.ecr.ap-south-1.amazonaws.com/kaushik-test:latest",
+      "name": "kaushik-test",
+      "image": "410699729259.dkr.ecr.ap-south-1.amazonaws.com/kaushik-test:b2fcd6c9918431813244ec6d405a9d5a2b6b00f5",
       "portMappings": [
         {
           "containerPort": 4000,
