@@ -1,4 +1,4 @@
-name: Spring boot deployment
+name: Selective Maven Build
 
 on:
   push:
@@ -9,21 +9,20 @@ on:
 jobs:
   detect-changes:
     runs-on: ubuntu-latest
-    outputs:
-        matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Generate build matrix
+      - name: Determine changed projects
         id: set-matrix
         run: |
-          echo "Generating matrix for changed services..."
-          CHANGED_DIRS=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '/' | cut -d/ -f1 | sort -u | uniq)
-          echo "Changed dirs: $CHANGED_DIRS"
+          echo "Detecting changed services..."
+          CHANGED_DIRS=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '/' | cut -d/ -f1 | sort -u)
+          echo "Changed directories:"
+          echo "$CHANGED_DIRS"
 
           MATRIX="[]"
           for dir in patient-service billing-service analytics-service; do
@@ -32,7 +31,6 @@ jobs:
             fi
           done
 
-          echo "Final matrix: $MATRIX"
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
   build:
@@ -41,9 +39,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
-
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -56,10 +53,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
-          key: maven-${{ runner.os }}-${{ hashFiles(format('{0}/pom.xml', matrix.service) ) }}
+          key: maven-${{ runner.os }}-${{ hashFiles(format('{0}/pom.xml', matrix.service)) }}
           restore-keys: |
             maven-${{ runner.os }}-
 
-      - name: Build Maven project
+      - name: Build project
         working-directory: ${{ matrix.service }}
         run: mvn clean install
