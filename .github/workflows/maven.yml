@@ -1,4 +1,4 @@
-name: Build Changed Maven Projects
+name: Build Changed Maven Projects (With Caching)
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Needed for complete diff comparison
+          fetch-depth: 0  # Needed to compare commits properly
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -26,25 +26,32 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            maven-${{ runner.os }}-
+
       - name: Find Changed Maven Projects
         id: changes
         run: |
           git fetch origin main --depth=1
 
-          # Find all changed files
+          # Get changed files since main
           CHANGED_FILES=$(git diff --name-only origin/main)
 
-          # Filter to pom.xml or any src/ folder changes
+          # Detect modified Maven project directories (pom.xml or src/ changes)
           CHANGED_DIRS=$(echo "$CHANGED_FILES" | grep -E 'pom\.xml|src/' | xargs -n1 dirname | sort -u)
 
-          # Check if we found any relevant project folders
           if [ -z "$CHANGED_DIRS" ]; then
-            echo "No relevant project changes detected."
+            echo "No relevant Maven project changes."
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Changed directories:"
-            echo "$CHANGED_DIRS"
             echo "$CHANGED_DIRS" > changed_dirs.txt
+            echo "Changed project directories:"
+            cat changed_dirs.txt
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -53,9 +60,9 @@ jobs:
         run: |
           while IFS= read -r dir; do
             if [ -f "$dir/pom.xml" ]; then
-              echo "🔨 Building Maven project: $dir"
+              echo "🔨 Building project in $dir"
               mvn -B -f "$dir/pom.xml" clean install
             else
-              echo "⚠️ Skipping $dir — no pom.xml found"
+              echo "⚠️ No pom.xml in $dir, skipping"
             fi
           done < changed_dirs.txt
