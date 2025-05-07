@@ -1,0 +1,70 @@
+# This workflow will build a Java project with Maven, and cache/restore any dependencies to improve the workflow execution time
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-maven
+
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+name: Spring Boot Deployment
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect changed projects
+        id: set-matrix
+        run: |
+          echo "Checking for changes..."
+          CHANGED_DIRS=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '/' | cut -d/ -f1 | sort -u)
+          echo "Changed directories: $CHANGED_DIRS"
+
+          MATRIX="[]"
+          for dir in patient-service billing-service analytics-service; do
+            if echo "$CHANGED_DIRS" | grep -q "^$dir$"; then
+              MATRIX=$(echo $MATRIX | jq --arg dir "$dir" '. += [{"service": $dir}]')
+            fi
+          done
+
+          echo "Build matrix: $MATRIX"
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+  build:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+    if: ${{ matrix.service != '' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: maven-${{ runner.os }}-${{ hashFiles(format('{0}/**/pom.xml', matrix.service)) }}
+          restore-keys: |
+            maven-${{ runner.os }}-
+
+      - name: Build with Maven
+        working-directory: ${{ matrix.service }}
+        run: mvn clean install
+      
